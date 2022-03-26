@@ -514,72 +514,30 @@ function AlexaCookie() {
             loginData.macDms = body.response.success.tokens.mac_dms;
 
             /*
-                Get Amazon Marketplace Country
-            */
+                amazon.co.jpのアカウントだと、/api/users/meへのアクセスで401が返ってくる。
+                そのため、loginData.amazonPageはオプション値をそのまま使い、リクエスト自体をスキップする。
+             */
+            loginData.amazonPage = _options.amazonPage;
+            loginData.loginCookie = Cookie;
 
-            const options = {
-                host: 'alexa.' + _options.baseAmazonPage,
-                path: '/api/users/me?platform=ios&version=2.2.443692.0',
-                method: 'GET',
-                headers: {
-                    'User-Agent': 'AmazonWebView/Amazon Alexa/2.2.443692.0/iOS/14.8/iPhone',
-                    'Accept-Language': _options.acceptLanguage,
-                    'Accept-Charset': 'utf-8',
-                    'Connection': 'keep-alive',
-                    'Accept': 'application/json',
-                    'Cookie': Cookie
+            getLocalCookies(loginData.amazonPage, loginData.refreshToken, (err, localCookie) => {
+                if (err) {
+                    callback && callback(err, null);
                 }
-            };
-            _options.logger && _options.logger('Alexa-Cookie: Get User data');
-            _options.logger && _options.logger(JSON.stringify(options));
-            request(options, (error, response, body) => {
-                if (!error) {
-                    try {
-                        if (typeof body !== 'object') body = JSON.parse(body);
-                    } catch (err) {
-                        _options.logger && _options.logger('Get User data Response: ' + JSON.stringify(body));
-                        callback && callback(err, null);
+
+                loginData.localCookie = localCookie;
+                getCSRFFromCookies(loginData.localCookie, _options, (err, resData) => {
+                    if (err) {
+                        callback && callback(new Error('Error getting csrf for ' + loginData.amazonPage), null);
                         return;
                     }
-                    _options.logger && _options.logger('Get User data Response: ' + JSON.stringify(body));
-
-                    Cookie = addCookies(Cookie, response.headers);
-
-                    if (body.marketPlaceDomainName) {
-                        const pos = body.marketPlaceDomainName.indexOf('.');
-                        if (pos !== -1) _options.amazonPage = body.marketPlaceDomainName.substr(pos + 1);
-                    }
-                    loginData.amazonPage = _options.amazonPage;
-                } else if (error && (!_options || !_options.amazonPage)) {
-                    callback && callback(error, null);
-                    return;
-                } else if (error && !_options.formerRegistrationData.amazonPage && _options.amazonPage) {
-                    _options.logger && _options.logger('Continue with externally set amazonPage: ' + _options.amazonPage);
-                } else if (error) {
-                    _options.logger && _options.logger('Ignore error while getting user data and amazonPage because previously set amazonPage is available');
-                }
-
-                loginData.loginCookie = Cookie;
-
-                getLocalCookies(loginData.amazonPage, loginData.refreshToken, (err, localCookie) => {
-                    if (err) {
-                        callback && callback(err, null);
-                    }
-
-                    loginData.localCookie = localCookie;
-                    getCSRFFromCookies(loginData.localCookie, _options, (err, resData) => {
-                        if (err) {
-                            callback && callback(new Error('Error getting csrf for ' + loginData.amazonPage), null);
-                            return;
-                        }
-                        loginData.localCookie = resData.cookie;
-                        loginData.csrf = resData.csrf;
-                        delete loginData.accessToken;
-                        delete loginData.authorization_code;
-                        delete loginData.verifier;
-                        _options.logger && _options.logger('Final Registration Result: ' + JSON.stringify(loginData));
-                        callback && callback(null, loginData);
-                    });
+                    loginData.localCookie = resData.cookie;
+                    loginData.csrf = resData.csrf;
+                    delete loginData.accessToken;
+                    delete loginData.authorization_code;
+                    delete loginData.verifier;
+                    _options.logger && _options.logger('Final Registration Result: ' + JSON.stringify(loginData));
+                    callback && callback(null, loginData);
                 });
             });
         });
@@ -680,6 +638,12 @@ function AlexaCookie() {
         }
 
         _options = __options;
+        /*
+            トークンの取得はamazon.comで行う。Node-RED側には下記を設定
+            Service Host: alexa.amazon.co.jp 
+            Page: amazon.co.jp
+         */
+        _options.baseAmazonPage = 'amazon.com';
 
         __options.proxyOnly = true;
 
